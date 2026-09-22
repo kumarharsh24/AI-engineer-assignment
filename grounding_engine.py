@@ -1,5 +1,5 @@
 """
-grounding_engine.py
+src/validators/grounding_validator.py
 Zero-hallucination verification engine.
 Enforces structural anti-hallucination validation:
   1. Validates that every referenced timestamp actually exists in the parsed transcript.
@@ -10,7 +10,11 @@ Enforces structural anti-hallucination validation:
 from dataclasses import dataclass, field
 import re
 from typing import Optional, List, Dict, Any, Tuple
-from transcript_parser import Transcript, DialogueTurn, QAUnit
+
+try:
+    from src.parsers.transcript_parser import Transcript, DialogueTurn, QAUnit
+except ImportError:
+    from transcript_parser import Transcript, DialogueTurn, QAUnit
 
 
 @dataclass
@@ -209,7 +213,6 @@ class StructuralGroundingValidator:
         """
         t = self.transcripts.get(transcript_key)
         if not t:
-            # Try fuzzy key match
             for k, candidate in self.transcripts.items():
                 if transcript_key.lower() in k.lower() or candidate.market.lower() in transcript_key.lower():
                     t = candidate
@@ -248,7 +251,7 @@ class StructuralGroundingValidator:
             )
             return True, citation, "Structural validation passed 100% verbatim."
 
-        # If not in the turn itself, check if in the immediate QAUnit (e.g. adjacent turn)
+        # Check if in the immediate QAUnit (adjacent turns)
         for unit in t.qa_units:
             if timestamp in unit.answer_timestamps or timestamp == unit.question_timestamp:
                 clean_unit_ans = normalize_text(unit.answer_text).lower()
