@@ -9,10 +9,17 @@ import pytest
 from transcript_parser import (
     load_transcripts_from_dir,
     parse_transcript_text,
+    parse_interview_guide,
     Transcript,
-    DialogueTurn
+    DialogueTurn,
+    QAUnit
 )
-from grounding_engine import GroundingVerifier, Citation
+from grounding_engine import (
+    GroundingVerifier,
+    Citation,
+    StructuralGroundingValidator,
+    StructuralAuditReport
+)
 from analyzer import (
     InterviewAnalyzer,
     GUIDE_QUESTIONS,
@@ -152,9 +159,9 @@ def test_comparative_matrix_dataframes(analyzer):
     """Verify that comparative and executive dataframes are populated."""
     df_comp = analyzer.build_comparison_dataframe()
     assert len(df_comp) == 6
-    assert "France (Dr. Martin)" in df_comp.columns
-    assert "Germany (Anna Keller)" in df_comp.columns
-    assert "UK (Dr. Carter)" in df_comp.columns
+    assert any("France" in col for col in df_comp.columns)
+    assert any("Germany" in col for col in df_comp.columns)
+    assert any("Kingdom" in col or "UK" in col for col in df_comp.columns)
 
     df_metrics = analyzer.get_metrics_matrix()
     assert len(df_metrics) == 6
@@ -204,4 +211,82 @@ def test_env_configuration():
         content = f.read()
     assert "OPENAI_API_KEY" in content
     assert "OPENAI_MODEL" in content
+
+
+# ==========================================
+# TEST 6: QAUNITS & STRUCTURAL VALIDATOR
+# ==========================================
+def test_qa_units_structure(transcripts):
+    """Verify that transcripts group dialogue into semantic QAUnits with timestamps."""
+    for fkey, t in transcripts.items():
+        assert len(t.qa_units) > 0
+        for unit in t.qa_units:
+            assert unit.question_text
+            assert unit.question_timestamp
+            assert len(unit.answer_timestamps) > 0
+            assert unit.answer_speaker
+
+
+def test_structural_grounding_validation(transcripts):
+    """Verify that StructuralGroundingValidator enforces timestamp existence and exact quotes."""
+    validator = StructuralGroundingValidator(transcripts)
+
+    # Valid citation passes
+    ok, cit, msg = validator.validate_citation_structurally(
+        "Transcript_1_France.txt",
+        "00:18",
+        "Adoption is growing, but it is still concentrated in larger academic hospitals"
+    )
+    assert ok
+    assert cit is not None
+    assert cit.is_verbatim
+
+    # Wrong timestamp fails
+    ok_bad_ts, _, msg_bad_ts = validator.validate_citation_structurally(
+        "Transcript_1_France.txt",
+        "99:99",
+        "Adoption is growing, but it is still concentrated in larger academic hospitals"
+    )
+    assert not ok_bad_ts
+    assert "Timestamp [99:99] does not exist" in msg_bad_ts
+
+    # Fabricated quote inside valid timestamp fails
+    ok_bad_q, _, msg_bad_q = validator.validate_citation_structurally(
+        "Transcript_1_France.txt",
+        "00:18",
+        "Robotic surgery is completely free for all hospitals in Paris."
+    )
+    assert not ok_bad_q
+    assert "Quote was not found verbatim" in msg_bad_q
+
+
+def test_dynamic_unaddressed_questions():
+    """Verify dynamic question extractor marks missing topics as 'Not directly addressed'."""
+    partial_text = """Expert 99 – Dr. Test User
+Role: Medical Director
+Market: Netherlands
+
+00:00
+Interviewer: How would you describe current adoption of robotic surgery in your market?
+
+00:15
+Dr. Test User: Robotic surgery adoption in the Netherlands is expanding steadily across academic hospitals.
+"""
+    custom_ts = parse_transcript_text(partial_text, "Transcript_99_Netherlands.txt")
+    analyzer = InterviewAnalyzer({"Transcript_99_Netherlands.txt": custom_ts})
+
+    answers = analyzer.get_analysis_for_expert("Transcript_99_Netherlands.txt")
+    assert len(answers) == 6
+
+    # Q1 was addressed
+    q1 = next(a for a in answers if a.question_id == "Q1")
+    assert "expanding steadily" in q1.summary_answer
+    assert len(q1.timestamps) > 0
+
+    # Q6 (timeline) was NOT addressed
+    q6 = next(a for a in answers if a.question_id == "Q6")
+    assert q6.summary_answer == "Not directly addressed"
+    assert len(q6.quotes) == 0
+    assert len(q6.timestamps) == 0
+
 

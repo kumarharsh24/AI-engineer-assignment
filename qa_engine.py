@@ -17,8 +17,8 @@ try:
 except ImportError:
     pass
 
-from transcript_parser import Transcript, DialogueTurn
-from grounding_engine import GroundingVerifier, Citation
+from transcript_parser import Transcript, DialogueTurn, QAUnit
+from grounding_engine import GroundingVerifier, Citation, StructuralGroundingValidator, StructuralAuditReport
 
 
 @dataclass
@@ -82,6 +82,7 @@ class CrossTranscriptQAEngine:
     def __init__(self, transcripts: Dict[str, Transcript]):
         self.transcripts = transcripts
         self.verifier = GroundingVerifier(transcripts)
+        self.structural_validator = StructuralGroundingValidator(transcripts)
         self._build_index()
 
     def _build_index(self):

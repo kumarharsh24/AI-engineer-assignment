@@ -315,10 +315,14 @@ with tabs[1]:
     st.markdown(f"### {selected_q['id']}: {selected_q['question']}")
     st.caption(f"Topic: **{selected_q['topic']}**")
 
-    q_cols = st.columns(3)
-    for idx, exp in enumerate(q_data.get("experts", [])):
-        with q_cols[idx]:
-            badge_class = "badge-france" if exp["market"] == "France" else ("badge-germany" if exp["market"] == "Germany" else "badge-uk")
+    experts_list = q_data.get("experts", [])
+    num_exp = max(len(experts_list), 1)
+    col_count = min(num_exp, 3)
+    q_cols = st.columns(col_count)
+
+    for idx, exp in enumerate(experts_list):
+        with q_cols[idx % col_count]:
+            badge_class = "badge-france" if "france" in exp["market"].lower() else ("badge-germany" if "germany" in exp["market"].lower() else "badge-uk")
             st.markdown(f"""
             <div class="expert-card">
                 <span class="{badge_class}">{exp['market'].upper()}</span>
@@ -328,23 +332,26 @@ with tabs[1]:
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown("**Verbatim Supporting Quotes & Citations:**")
-            for c in exp.get("citations", []):
-                verbatim_badge = '<span class="badge-verified">✓ Verbatim Match</span>' if c['is_verbatim'] else ''
-                st.markdown(f"""
-                <div class="quote-box">
-                    "{c['verbatim_quote']}"
-                    <div style="margin-top:0.3rem;">
-                        <span class="badge-ts">⏱️ {c['timestamp']}</span>
-                        <span style="font-size:0.8rem; color:#475569; margin-left:0.3rem;">{c['speaker']}</span>
-                        {verbatim_badge}
+            if exp.get("citations"):
+                st.markdown("**Verbatim Supporting Quotes & Citations:**")
+                for c in exp["citations"]:
+                    verbatim_badge = '<span class="badge-verified">✓ Verbatim Match</span>' if c['is_verbatim'] else ''
+                    st.markdown(f"""
+                    <div class="quote-box">
+                        "{c['verbatim_quote']}"
+                        <div style="margin-top:0.3rem;">
+                            <span class="badge-ts">⏱️ {c['timestamp']}</span>
+                            <span style="font-size:0.8rem; color:#475569; margin-left:0.3rem;">{c['speaker']}</span>
+                            {verbatim_badge}
+                        </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
 
-            with st.expander("🔍 View Source Turn Context"):
-                for c in exp.get("citations", []):
-                    st.code(c.get("context_turn", "N/A"), language="markdown")
+                with st.expander("🔍 View Source Turn Context & Excerpt"):
+                    for c in exp["citations"]:
+                        st.code(c.get("context_turn", "N/A"), language="markdown")
+            else:
+                st.caption("ℹ️ *This question was not directly addressed by this expert.*")
 
     st.markdown("---")
     st.subheader("Question-by-Question Comparison Table")

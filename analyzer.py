@@ -5,9 +5,9 @@ Generates cross-transcript synthesis: common themes, disagreements, and comparat
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import pandas as pd
-from transcript_parser import Transcript
+from transcript_parser import Transcript, QAUnit
 from grounding_engine import GroundingVerifier, Citation
 
 
@@ -361,43 +361,132 @@ class InterviewAnalyzer:
         self.transcripts = transcripts
         self.verifier = GroundingVerifier(transcripts)
 
+    def _match_guide_question_to_qa_units(
+        self,
+        question_text: str,
+        transcript: Transcript
+    ) -> Tuple[Optional[QAUnit], str, float]:
+        """
+        Dynamically finds the Q&A unit in a transcript that best addresses a guide question.
+        Returns (best_unit, extract_quote, similarity_score).
+        """
+        import re
+        q_words = set(re.findall(r'\b[a-zA-Z0-9_]+\b', question_text.lower()))
+        stopwords = {"how", "what", "is", "are", "the", "in", "your", "market", "for", "to", "and", "a", "of"}
+        q_terms = [w for w in q_words if w not in stopwords]
+
+        best_unit = None
+        best_score = 0.0
+
+        for unit in transcript.qa_units:
+            unit_text = (unit.question_text + " " + unit.answer_text).lower()
+            score = 0.0
+            for term in q_terms:
+                if term in unit_text:
+                    score += 1.0
+
+            # Normalize by query length
+            norm_score = score / max(len(q_terms), 1)
+            if norm_score > best_score:
+                best_score = norm_score
+                best_unit = unit
+
+        if best_unit and best_score >= 0.30:
+            # Extract first substantive sentence from answer as lead quote
+            sentences = [s.strip() for s in best_unit.answer_text.split(".") if len(s.strip()) > 15]
+            lead_quote = sentences[0] + "." if sentences else best_unit.answer_text[:120]
+            return best_unit, lead_quote, round(best_score, 2)
+
+        return None, "", 0.0
+
     def get_analysis_for_expert(self, transcript_key: str) -> List[ExpertAnswer]:
-        """Returns answers and verified citations for each guide question for a specific expert."""
-        if transcript_key not in EXPERT_ANALYSIS_DATA:
+        """
+        Returns answers and verified citations for each guide question for a specific expert.
+        Uses verified ground truth when available, and dynamically matches Q&A units
+        for any newly dropped transcript (4th, 5th, ..., 30th).
+        """
+        transcript = self.transcripts.get(transcript_key)
+        if not transcript:
+            for k, candidate in self.transcripts.items():
+                if transcript_key.lower() in k.lower() or candidate.market.lower() in transcript_key.lower():
+                    transcript = candidate
+                    transcript_key = k
+                    break
+
+        if not transcript:
             return []
 
-        data = EXPERT_ANALYSIS_DATA[transcript_key]
         results = []
 
+        # 1. Use verified ground truth if available for standard case files
+        if transcript_key in EXPERT_ANALYSIS_DATA:
+            data = EXPERT_ANALYSIS_DATA[transcript_key]
+            for q in GUIDE_QUESTIONS:
+                qid = q["id"]
+                q_info = data["answers"].get(qid)
+                if not q_info:
+                    continue
+
+                citations = []
+                for quote in q_info["quotes"]:
+                    citation = self.verifier.verify_quote(quote, transcript_key)
+                    if citation:
+                        citations.append(citation)
+
+                ans = ExpertAnswer(
+                    question_id=qid,
+                    question_text=q["question"],
+                    expert_name=data["expert_name"],
+                    expert_role=data["role"],
+                    market=data["market"],
+                    summary_answer=q_info["summary"],
+                    quotes=q_info["quotes"],
+                    timestamps=q_info["timestamps"],
+                    citations=citations
+                )
+                results.append(ans)
+            return results
+
+        # 2. Dynamic Q&A unit matcher for any 4th, 5th, ... 30th dropped transcript
         for q in GUIDE_QUESTIONS:
             qid = q["id"]
-            q_info = data["answers"].get(qid)
-            if not q_info:
-                continue
+            best_unit, lead_quote, score = self._match_guide_question_to_qa_units(q["question"], transcript)
 
-            citations = []
-            for quote in q_info["quotes"]:
-                citation = self.verifier.verify_quote(quote, transcript_key)
-                if citation:
-                    citations.append(citation)
-
-            ans = ExpertAnswer(
-                question_id=qid,
-                question_text=q["question"],
-                expert_name=data["expert_name"],
-                expert_role=data["role"],
-                market=data["market"],
-                summary_answer=q_info["summary"],
-                quotes=q_info["quotes"],
-                timestamps=q_info["timestamps"],
-                citations=citations
-            )
+            if best_unit and lead_quote:
+                citation = self.verifier.verify_quote(lead_quote, transcript_key)
+                citations = [citation] if citation else []
+                ans = ExpertAnswer(
+                    question_id=qid,
+                    question_text=q["question"],
+                    expert_name=transcript.expert_name,
+                    expert_role=transcript.role,
+                    market=transcript.market,
+                    summary_answer=f"{transcript.expert_name} states: {lead_quote}",
+                    quotes=[lead_quote],
+                    timestamps=[best_unit.primary_timestamp],
+                    citations=citations
+                )
+            else:
+                ans = ExpertAnswer(
+                    question_id=qid,
+                    question_text=q["question"],
+                    expert_name=transcript.expert_name,
+                    expert_role=transcript.role,
+                    market=transcript.market,
+                    summary_answer="Not directly addressed",
+                    quotes=[],
+                    timestamps=[],
+                    citations=[]
+                )
             results.append(ans)
 
         return results
 
     def get_question_comparison(self, question_id: str) -> Dict[str, Any]:
-        """Returns side-by-side answers and citations for all 3 experts for a given question."""
+        """
+        Returns side-by-side answers and citations for ALL loaded transcripts for a given question.
+        Automatically scales as new transcripts are added.
+        """
         q_meta = next((q for q in GUIDE_QUESTIONS if q["id"] == question_id), None)
         if not q_meta:
             return {}
@@ -409,48 +498,41 @@ class InterviewAnalyzer:
             "experts": []
         }
 
-        for fkey in ["Transcript_1_France.txt", "Transcript_2_Germany.txt", "Transcript_3_UK.txt"]:
-            if fkey in EXPERT_ANALYSIS_DATA:
-                adata = EXPERT_ANALYSIS_DATA[fkey]
-                ans_data = adata["answers"].get(question_id, {})
-                citations = []
-                for quote in ans_data.get("quotes", []):
-                    c = self.verifier.verify_quote(quote, fkey)
-                    if c:
-                        citations.append(c.to_dict())
+        # Iterate over all loaded transcripts dynamically
+        for fkey, transcript in self.transcripts.items():
+            expert_answers = self.get_analysis_for_expert(fkey)
+            matching_ans = next((a for a in expert_answers if a.question_id == question_id), None)
 
+            if matching_ans:
                 comparison["experts"].append({
                     "file_name": fkey,
-                    "expert_name": adata["expert_name"],
-                    "role": adata["role"],
-                    "market": adata["market"],
-                    "summary": ans_data.get("summary", "N/A"),
-                    "quotes": ans_data.get("quotes", []),
-                    "timestamps": ans_data.get("timestamps", []),
-                    "citations": citations
+                    "expert_name": matching_ans.expert_name,
+                    "role": matching_ans.expert_role,
+                    "market": matching_ans.market,
+                    "summary": matching_ans.summary_answer,
+                    "quotes": matching_ans.quotes,
+                    "timestamps": matching_ans.timestamps,
+                    "citations": [c.to_dict() for c in matching_ans.citations]
                 })
 
         return comparison
 
     def build_comparison_dataframe(self) -> pd.DataFrame:
-        """Constructs a clean summary DataFrame comparing questions across France, Germany, and UK."""
+        """Constructs a clean summary DataFrame comparing questions across all loaded transcripts."""
         rows = []
         for q in GUIDE_QUESTIONS:
             qid = q["id"]
             comp = self.get_question_comparison(qid)
-            
-            exp_map = {e["market"]: e for e in comp.get("experts", [])}
-            france = exp_map.get("France", {})
-            germany = exp_map.get("Germany", {})
-            uk = exp_map.get("United Kingdom", {})
-
-            rows.append({
+            row = {
                 "Question ID": qid,
-                "Guide Question": q["question"],
-                "France (Dr. Martin)": f"{france.get('summary', '')} [Citations: {', '.join(france.get('timestamps', []))}]",
-                "Germany (Anna Keller)": f"{germany.get('summary', '')} [Citations: {', '.join(germany.get('timestamps', []))}]",
-                "UK (Dr. Carter)": f"{uk.get('summary', '')} [Citations: {', '.join(uk.get('timestamps', []))}]"
-            })
+                "Guide Question": q["question"]
+            }
+            for exp in comp.get("experts", []):
+                col_name = f"{exp['market']} ({exp['expert_name']})"
+                ts_str = f" [Citations: {', '.join(exp.get('timestamps', []))}]" if exp.get('timestamps') else ""
+                row[col_name] = f"{exp.get('summary', 'Not directly addressed')}{ts_str}"
+
+            rows.append(row)
 
         return pd.DataFrame(rows)
 
