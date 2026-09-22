@@ -191,3 +191,17 @@ def test_qa_irrelevant_query_handling(qa_engine):
     resp = qa_engine.answer_query_offline("What is the average rainfall in the Sahara desert during July?")
     assert not resp.grounded
     assert "No sufficiently relevant statements" in resp.answer_text
+
+
+# ==========================================
+# TEST 5: ENVIRONMENT CONFIGURATION
+# ==========================================
+def test_env_configuration():
+    """Verify that .env.example exists with expected configuration keys."""
+    env_example_path = os.path.join(WORKSPACE_DIR, ".env.example")
+    assert os.path.exists(env_example_path)
+    with open(env_example_path, "r") as f:
+        content = f.read()
+    assert "OPENAI_API_KEY" in content
+    assert "OPENAI_MODEL" in content
+

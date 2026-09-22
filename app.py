@@ -8,6 +8,10 @@ import os
 import json
 import streamlit as st
 import pandas as pd
+from dotenv import load_dotenv
+
+# Load environment variables from .env if present
+load_dotenv()
 
 from transcript_parser import (
     load_transcripts_from_dir,
@@ -167,10 +171,13 @@ with st.sidebar:
     )
 
     openai_key = ""
-    llm_model = "gpt-4o-mini"
+    default_model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    model_options = ["gpt-4o-mini", "gpt-4o"]
+    default_idx = model_options.index(default_model) if default_model in model_options else 0
+    llm_model = default_model
     if engine_choice == "LLM-Augmented (OpenAI)":
         openai_key = st.text_input("OpenAI API Key", type="password", value=os.environ.get("OPENAI_API_KEY", ""))
-        llm_model = st.selectbox("Model", ["gpt-4o-mini", "gpt-4o"])
+        llm_model = st.selectbox("Model", model_options, index=default_idx)
         if not openai_key:
             st.info("💡 Enter your OpenAI key or switch to Offline Verified mode.")
 

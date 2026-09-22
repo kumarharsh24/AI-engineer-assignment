@@ -11,6 +11,12 @@ import math
 import os
 import re
 from typing import List, Dict, Any, Optional
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from transcript_parser import Transcript, DialogueTurn
 from grounding_engine import GroundingVerifier, Citation
 
