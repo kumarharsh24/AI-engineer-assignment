@@ -181,17 +181,26 @@ pytest test_app.py -v
 
 ```
 .
-├── README.md                 # Project documentation and technical demo guide
-├── README_CASE.md            # Original case specification
-├── Interview_Guide.txt       # 6 core research questions
-├── Transcript_1_France.txt   # Dr. Jean Martin (Head of Urology)
-├── Transcript_2_Germany.txt  # Anna Keller (Former Procurement Director)
-├── Transcript_3_UK.txt       # Dr. Emily Carter (Consultant Urologist)
-├── app.py                    # Streamlit interactive application
-├── transcript_parser.py      # Transcript ingestion and turn parser
-├── grounding_engine.py       # Zero-hallucination quote and timestamp verifier
-├── analyzer.py               # Interview guide analyzer and cross-market synthesizer
-├── qa_engine.py              # Cross-transcript search and Q&A engine
-├── test_app.py               # Pytest automated test suite
-└── requirements.txt          # Python dependencies
+├── src/
+│   ├── __init__.py
+│   ├── parsers/
+│   │   ├── __init__.py
+│   │   └── transcript_parser.py    # Ingestion, dialogue turns & QAUnit segmentation
+│   ├── validators/
+│   │   ├── __init__.py
+│   │   └── grounding_validator.py  # StructuralGroundingValidator & Citation audit
+│   └── engines/
+│       ├── __init__.py
+│       ├── analyzer.py             # Guide question synthesis & cross-market consensus
+│       └── qa_engine.py            # Context-enriched BM25 & LLM retrieval Q&A
+├── input_transcripts/              # Zero-config auto-discovery folder for calls
+│   ├── Transcript_1_France.txt
+│   ├── Transcript_2_Germany.txt
+│   └── Transcript_3_UK.txt
+├── app.py                          # Streamlit interactive application
+├── test_app.py                     # Automated pytest test suite (16 tests)
+├── Interview_Guide.txt             # 6 standard research questions
+├── README.md                       # Comprehensive documentation & demo guide
+├── requirements.txt                # Python dependencies
+└── .env.example                    # Reference configuration template
 ```

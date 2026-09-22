@@ -290,3 +290,16 @@ Dr. Test User: Robotic surgery adoption in the Netherlands is expanding steadily
     assert len(q6.timestamps) == 0
 
 
+def test_src_package_structure():
+    """Verify that src/parsers and src/validators packages can be imported and executed directly."""
+    from src.parsers import parse_transcript_text, QAUnit, DialogueTurn, load_transcripts_from_dir
+    from src.validators import StructuralGroundingValidator, GroundingVerifier, Citation
+    from src.engines import InterviewAnalyzer, CrossTranscriptQAEngine
+
+    ts = load_transcripts_from_dir(WORKSPACE_DIR)
+    validator = StructuralGroundingValidator(ts)
+    assert len(ts) >= 3
+    assert validator is not None
+
+
+

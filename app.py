@@ -13,23 +13,43 @@ from dotenv import load_dotenv
 # Load environment variables if present
 load_dotenv()
 
-from transcript_parser import (
-    load_transcripts_from_dir,
-    parse_transcript_text,
-    parse_interview_guide,
-    Transcript,
-    DialogueTurn,
-    QAUnit
-)
-from analyzer import (
-    InterviewAnalyzer,
-    GUIDE_QUESTIONS,
-    COMMON_THEMES,
-    DISAGREEMENTS_AND_DIVERGENCES,
-    EXPERT_ANALYSIS_DATA
-)
-from qa_engine import CrossTranscriptQAEngine, SAMPLE_QUESTIONS
-from grounding_engine import GroundingVerifier, StructuralGroundingValidator
+try:
+    from src.parsers import (
+        load_transcripts_from_dir,
+        parse_transcript_text,
+        parse_interview_guide,
+        Transcript,
+        DialogueTurn,
+        QAUnit
+    )
+    from src.validators import GroundingVerifier, StructuralGroundingValidator, Citation
+    from src.engines import (
+        InterviewAnalyzer,
+        GUIDE_QUESTIONS,
+        COMMON_THEMES,
+        DISAGREEMENTS_AND_DIVERGENCES,
+        EXPERT_ANALYSIS_DATA,
+        CrossTranscriptQAEngine,
+        SAMPLE_QUESTIONS
+    )
+except ImportError:
+    from transcript_parser import (
+        load_transcripts_from_dir,
+        parse_transcript_text,
+        parse_interview_guide,
+        Transcript,
+        DialogueTurn,
+        QAUnit
+    )
+    from analyzer import (
+        InterviewAnalyzer,
+        GUIDE_QUESTIONS,
+        COMMON_THEMES,
+        DISAGREEMENTS_AND_DIVERGENCES,
+        EXPERT_ANALYSIS_DATA
+    )
+    from qa_engine import CrossTranscriptQAEngine, SAMPLE_QUESTIONS
+    from grounding_engine import GroundingVerifier, StructuralGroundingValidator
 
 
 # Page Configuration
