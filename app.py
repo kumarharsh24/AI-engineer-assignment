@@ -162,24 +162,41 @@ with st.sidebar:
     for fkey, t in st.session_state.transcripts.items():
         st.markdown(f"• **{t.expert_name}** ({t.market})  \n  *{t.role}* ({len(t.turns)} turns)")
 
+    if "openai_api_key" not in st.session_state:
+        st.session_state.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+
     st.markdown("---")
     st.subheader("⚙️ Engine Configuration")
     engine_choice = st.selectbox(
         "QA Engine Mode",
         ["Offline Verified (Zero-Key, Grounded)", "LLM-Augmented (OpenAI)"],
+        index=0,
         help="Offline mode guarantees 100% zero-hallucination and requires no API key. LLM mode uses OpenAI with citation auditing."
     )
 
-    openai_key = ""
+    openai_key = st.session_state.openai_api_key
     default_model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
     model_options = ["gpt-4o-mini", "gpt-4o"]
     default_idx = model_options.index(default_model) if default_model in model_options else 0
     llm_model = default_model
+
     if engine_choice == "LLM-Augmented (OpenAI)":
-        openai_key = st.text_input("OpenAI API Key", type="password", value=os.environ.get("OPENAI_API_KEY", ""))
+        user_key_input = st.text_input(
+            "🔑 OpenAI API Key",
+            type="password",
+            value=st.session_state.openai_api_key,
+            placeholder="sk-proj-...",
+            help="Enter your OpenAI API key directly here. It stays in memory for this session and is never written to disk."
+        )
+        if user_key_input:
+            st.session_state.openai_api_key = user_key_input
+            openai_key = user_key_input
+            st.success("✅ OpenAI API key active")
+        else:
+            openai_key = ""
+            st.info("💡 Paste your OpenAI API key above, or switch to Offline Verified mode.")
+
         llm_model = st.selectbox("Model", model_options, index=default_idx)
-        if not openai_key:
-            st.info("💡 Enter your OpenAI key or switch to Offline Verified mode.")
 
     st.markdown("---")
     st.caption("Hasamex AI Engineer Technical Assessment")
@@ -408,6 +425,24 @@ with tabs[2]:
 with tabs[3]:
     st.header("Interactive Cross-Transcript Q&A Console")
     st.markdown("Ask custom questions across all 3 transcripts. Every answer is grounded with verbatim quotes and timestamps.")
+
+    if engine_choice == "LLM-Augmented (OpenAI)":
+        if not openai_key:
+            st.warning("⚠️ **LLM-Augmented mode is active.** Please enter your OpenAI API key directly below (or in the sidebar):")
+            inline_key = st.text_input(
+                "🔑 Enter OpenAI API Key directly in UI:",
+                type="password",
+                key="tab4_direct_key",
+                placeholder="sk-proj-...",
+                help="Your key is held strictly in session memory and never saved to any file."
+            )
+            if inline_key:
+                st.session_state.openai_api_key = inline_key
+                openai_key = inline_key
+                st.success("✅ OpenAI API key active! You can now ask questions below.")
+                st.rerun()
+        else:
+            st.success(f"🤖 LLM-Augmented Mode Active ({llm_model}) — Key loaded directly in UI session.")
 
     st.markdown("**Quick Preset Strategy Consulting Questions:**")
     clicked_preset = None
